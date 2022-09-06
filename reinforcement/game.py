@@ -1,15 +1,15 @@
 # game.py
 # -------
-# Licensing Information:  You are free to use or extend these projects for 
-# educational purposes provided that (1) you do not distribute or publish 
-# solutions, (2) you retain this notice, and (3) you provide clear 
-# attribution to UC Berkeley, including a link to 
+# Licensing Information:  You are free to use or extend these projects for
+# educational purposes provided that (1) you do not distribute or publish
+# solutions, (2) you retain this notice, and (3) you provide clear
+# attribution to UC Berkeley, including a link to
 # http://inst.eecs.berkeley.edu/~cs188/pacman/pacman.html
-# 
+#
 # Attribution Information: The Pacman AI projects were developed at UC Berkeley.
-# The core projects and autograders were primarily created by John DeNero 
+# The core projects and autograders were primarily created by John DeNero
 # (denero@cs.berkeley.edu) and Dan Klein (klein@cs.berkeley.edu).
-# Student side autograding was added by Brad Miller, Nick Hay, and 
+# Student side autograding was added by Brad Miller, Nick Hay, and
 # Pieter Abbeel (pabbeel@cs.berkeley.edu).
 
 
@@ -25,6 +25,8 @@ from util import *
 import time, os
 import traceback
 import sys
+
+from advise import *
 
 #######################
 # Parts worth reading #
@@ -516,7 +518,8 @@ class Game:
     The Game manages the control flow, soliciting actions from agents.
     """
 
-    def __init__( self, agents, display, rules, startingIndex=0, muteAgents=False, catchExceptions=False ):
+    # def __init__( self, agents, display, rules, startingIndex=0, muteAgents=False, catchExceptions=False ):
+    def __init__( self, agents, display, teacher, rules, startingIndex=0, muteAgents=False, catchExceptions=False ):
         self.agentCrashed = False
         self.agents = agents
         self.display = display
@@ -531,6 +534,8 @@ class Game:
         self.agentTimeout = False
         import cStringIO
         self.agentOutput = [cStringIO.StringIO() for agent in agents]
+
+        self.teacher = teacher
 
     def getProgress(self):
         if self.gameOver:
@@ -565,12 +570,14 @@ class Game:
         sys.stderr = OLD_STDERR
 
 
-    def run( self ):
+    def run( self, advice_budget, advice_strategy, call_counter):
         """
         Main control loop for game play.
         """
         self.display.initialize(self.state.data)
         self.numMoves = 0
+
+        pacman_episode_data = []
 
         ###self.display.initialize(self.state.makeObservation(1).data)
         # inform learning agents of the game start
@@ -684,7 +691,33 @@ class Game:
                     self.unmute()
                     return
             else:
-                action = agent.getAction(observation)
+                # action = agent.getAction(observation)
+                ################################################################
+                if agentIndex == 0:
+                    student_action = agent.getAction(observation)
+                    teacher_action = self.teacher.getAction(observation) # have to do both
+
+                    state_importance = 0
+                    if advice_strategy == 'Importance' or advice_strategy == 'MistakeCorrecting':
+                        # print ('self.teacher.calc_state_importance(observation)', self.teacher.calc_state_importance(observation))
+                        state_importance = self.teacher.calc_state_importance(observation)
+
+                    call_counter += 1
+                    should_advise, advice_budget = determine_give_advice(advice_budget, advice_strategy, state_importance,
+                    teacher_action, student_action, call_counter)
+
+                    if should_advise:
+                        action = teacher_action
+                    else:
+                        action = student_action
+                    agent.doAction(observation,action)
+                    pacman_episode_data.append([observation, action, state_importance])
+
+                else: #ghost
+                    action = agent.getAction(observation)
+                ################################################################
+
+
             self.unmute()
 
             # Execute the action
@@ -728,3 +761,5 @@ class Game:
                     self.unmute()
                     return
         self.display.finish()
+
+        return advice_budget, call_counter, pacman_episode_data
