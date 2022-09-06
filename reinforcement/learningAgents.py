@@ -1,21 +1,25 @@
 # learningAgents.py
 # -----------------
-# Licensing Information:  You are free to use or extend these projects for 
-# educational purposes provided that (1) you do not distribute or publish 
-# solutions, (2) you retain this notice, and (3) you provide clear 
-# attribution to UC Berkeley, including a link to 
+# Licensing Information:  You are free to use or extend these projects for
+# educational purposes provided that (1) you do not distribute or publish
+# solutions, (2) you retain this notice, and (3) you provide clear
+# attribution to UC Berkeley, including a link to
 # http://inst.eecs.berkeley.edu/~cs188/pacman/pacman.html
-# 
+#
 # Attribution Information: The Pacman AI projects were developed at UC Berkeley.
-# The core projects and autograders were primarily created by John DeNero 
+# The core projects and autograders were primarily created by John DeNero
 # (denero@cs.berkeley.edu) and Dan Klein (klein@cs.berkeley.edu).
-# Student side autograding was added by Brad Miller, Nick Hay, and 
+# Student side autograding was added by Brad Miller, Nick Hay, and
 # Pieter Abbeel (pabbeel@cs.berkeley.edu).
 
 
 from game import Directions, Agent, Actions
 
 import random,util,time
+
+import numpy as np
+from os.path import exists
+
 
 class ValueEstimationAgent(Agent):
     """
@@ -161,7 +165,7 @@ class ReinforcementAgent(ValueEstimationAgent):
     def isInTesting(self):
         return not self.isInTraining()
 
-    def __init__(self, actionFn = None, numTraining=100, epsilon=0.5, alpha=0.5, gamma=1):
+    def __init__(self, does_load_weights, actionFn = None, numTraining=100, epsilon=0.5, alpha=0.5, gamma=1):
         """
         actionFn: Function which takes a state and returns the list of legal actions
 
@@ -234,7 +238,7 @@ class ReinforcementAgent(ValueEstimationAgent):
             self.lastWindowAccumRewards = 0.0
         self.lastWindowAccumRewards += state.getScore()
 
-        NUM_EPS_UPDATE = 100
+        NUM_EPS_UPDATE = 10
         if self.episodesSoFar % NUM_EPS_UPDATE == 0:
             print 'Reinforcement Learning Status:'
             windowAvg = self.lastWindowAccumRewards / float(NUM_EPS_UPDATE)
@@ -250,6 +254,15 @@ class ReinforcementAgent(ValueEstimationAgent):
                 print '\tAverage Rewards over testing: %.2f' % testAvg
             print '\tAverage Rewards for last %d episodes: %.2f'  % (
                     NUM_EPS_UPDATE,windowAvg)
+
+            fname = 'results/avg_rewards'
+            if exists(fname + '.npy'):
+                windowAvgs = list(np.load(fname + '.npy'))
+                windowAvgs.append(windowAvg)
+            else:
+                windowAvgs = [windowAvg]
+            np.save(fname, np.array(windowAvgs))
+
             print '\tEpisode took %.2f seconds' % (time.time() - self.episodeStartTime)
             self.lastWindowAccumRewards = 0.0
             self.episodeStartTime = time.time()
