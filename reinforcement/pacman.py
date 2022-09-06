@@ -1,15 +1,15 @@
 # pacman.py
 # ---------
-# Licensing Information:  You are free to use or extend these projects for 
-# educational purposes provided that (1) you do not distribute or publish 
-# solutions, (2) you retain this notice, and (3) you provide clear 
-# attribution to UC Berkeley, including a link to 
+# Licensing Information:  You are free to use or extend these projects for
+# educational purposes provided that (1) you do not distribute or publish
+# solutions, (2) you retain this notice, and (3) you provide clear
+# attribution to UC Berkeley, including a link to
 # http://inst.eecs.berkeley.edu/~cs188/pacman/pacman.html
-# 
+#
 # Attribution Information: The Pacman AI projects were developed at UC Berkeley.
-# The core projects and autograders were primarily created by John DeNero 
+# The core projects and autograders were primarily created by John DeNero
 # (denero@cs.berkeley.edu) and Dan Klein (klein@cs.berkeley.edu).
-# Student side autograding was added by Brad Miller, Nick Hay, and 
+# Student side autograding was added by Brad Miller, Nick Hay, and
 # Pieter Abbeel (pabbeel@cs.berkeley.edu).
 
 
@@ -48,6 +48,9 @@ from util import nearestPoint
 from util import manhattanDistance
 import util, layout
 import sys, types, time, random, os
+
+import json
+import numpy as np
 
 ###################################################
 # YOUR INTERFACE TO THE PACMAN WORLD: A GameState #
@@ -272,11 +275,12 @@ class ClassicGameRules:
     def __init__(self, timeout=30):
         self.timeout = timeout
 
-    def newGame( self, layout, pacmanAgent, ghostAgents, display, quiet = False, catchExceptions=False):
+    # def newGame( self, layout, pacmanAgent, ghostAgents, display, quiet = False, catchExceptions=False):
+    def newGame( self, layout, pacmanAgent, ghostAgents, display, teacher, quiet = False, catchExceptions=False):
         agents = [pacmanAgent] + ghostAgents[:layout.getNumGhosts()]
         initState = GameState()
         initState.initialize( layout, len(ghostAgents) )
-        game = Game(agents, display, self, catchExceptions=catchExceptions)
+        game = Game(agents, display, teacher, self, catchExceptions=catchExceptions)
         game.state = initState
         self.initialState = initState.deepCopy()
         self.quiet = quiet
@@ -544,8 +548,16 @@ def readCommand( argv ):
     if options.numTraining > 0:
         args['numTraining'] = options.numTraining
         if 'numTraining' not in agentOpts: agentOpts['numTraining'] = options.numTraining
+
+    agentOpts['does_load_weights'] = False
     pacman = pacmanType(**agentOpts) # Instantiate Pacman with agentArgs
     args['pacman'] = pacman
+
+    #####################Try giving a teacher here#############################
+    agentOpts['does_load_weights'] = True
+    teacher = pacmanType(**agentOpts)
+    args['teacher'] = teacher
+    ########################
 
     # Don't display training games
     if 'numTrain' in agentOpts:
@@ -612,7 +624,8 @@ def replayGame( layout, actions, display ):
     import pacmanAgents, ghostAgents
     rules = ClassicGameRules()
     agents = [pacmanAgents.GreedyAgent()] + [ghostAgents.RandomGhost(i+1) for i in range(layout.getNumGhosts())]
-    game = rules.newGame( layout, agents[0], agents[1:], display )
+    # game = rules.newGame( layout, agents[0], agents[1:], display)
+    game = rules.newGame( layout, agents[0], agents[1:], display, teacher)
     state = game.state
     display.initialize(state.data)
 
@@ -626,12 +639,16 @@ def replayGame( layout, actions, display ):
 
     display.finish()
 
-def runGames( layout, pacman, ghosts, display, numGames, record, numTraining = 0, catchExceptions=False, timeout=30 ):
+def runGames( layout, pacman, ghosts, display, numGames, record, teacher, numTraining = 0, catchExceptions=False, timeout=30 ):
     import __main__
     __main__.__dict__['_display'] = display
 
     rules = ClassicGameRules(timeout)
     games = []
+
+    advice_budget = 3000
+    advice_strategy = 'AlwaysAdvise'
+    call_counter = 0
 
     for i in range( numGames ):
         beQuiet = i < numTraining
@@ -643,8 +660,14 @@ def runGames( layout, pacman, ghosts, display, numGames, record, numTraining = 0
         else:
             gameDisplay = display
             rules.quiet = False
-        game = rules.newGame( layout, pacman, ghosts, gameDisplay, beQuiet, catchExceptions)
-        game.run()
+        # game = rules.newGame( layout, pacman, ghosts, gameDisplay, beQuiet, catchExceptions)
+        # game.run()
+        game = rules.newGame( layout, pacman, ghosts, gameDisplay, teacher, beQuiet, catchExceptions)
+        advice_budget, call_counter, pacman_episode_data = game.run(advice_budget, advice_strategy, call_counter)
+        if advice_budget > 0:
+            np.save('results/' + advice_strategy+'_budget_used_up', np.array([i]))
+
+
         if not beQuiet: games.append(game)
 
         if record:
@@ -654,6 +677,15 @@ def runGames( layout, pacman, ghosts, display, numGames, record, numTraining = 0
             components = {'layout': layout, 'actions': game.moveHistory}
             cPickle.dump(components, f)
             f.close()
+
+    # save the weights here
+    save_weights = False
+    if save_weights:
+        weights_data = {}
+        for key in game.agents[0].weights :
+            weights_data[key[0].__str__()+ '----' +  key[1]] = game.agents[0].weights[key]
+        with open('weights/teacher_weights.json', 'w') as f:
+            json.dump(weights_data, f)
 
     if (numGames-numTraining) > 0:
         scores = [game.state.getScore() for game in games]
