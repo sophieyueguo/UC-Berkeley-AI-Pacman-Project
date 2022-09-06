@@ -1,15 +1,15 @@
 # qlearningAgents.py
 # ------------------
-# Licensing Information:  You are free to use or extend these projects for 
-# educational purposes provided that (1) you do not distribute or publish 
-# solutions, (2) you retain this notice, and (3) you provide clear 
-# attribution to UC Berkeley, including a link to 
+# Licensing Information:  You are free to use or extend these projects for
+# educational purposes provided that (1) you do not distribute or publish
+# solutions, (2) you retain this notice, and (3) you provide clear
+# attribution to UC Berkeley, including a link to
 # http://inst.eecs.berkeley.edu/~cs188/pacman/pacman.html
-# 
+#
 # Attribution Information: The Pacman AI projects were developed at UC Berkeley.
-# The core projects and autograders were primarily created by John DeNero 
+# The core projects and autograders were primarily created by John DeNero
 # (denero@cs.berkeley.edu) and Dan Klein (klein@cs.berkeley.edu).
-# Student side autograding was added by Brad Miller, Nick Hay, and 
+# Student side autograding was added by Brad Miller, Nick Hay, and
 # Pieter Abbeel (pabbeel@cs.berkeley.edu).
 
 
@@ -18,6 +18,9 @@ from learningAgents import ReinforcementAgent
 from featureExtractors import *
 
 import random,util,math
+
+import json
+import numpy as np
 
 class QLearningAgent(ReinforcementAgent):
     """
@@ -72,7 +75,7 @@ class QLearningAgent(ReinforcementAgent):
         for action in legalActions:
             if self.getQValue(state,action) > maxqvalue:
                 maxqvalue = self.getQValue(state,action)
-        return maxqvalue  
+        return maxqvalue
         #util.raiseNotDefined()
 
     def computeActionFromQValues(self, state):
@@ -115,7 +118,7 @@ class QLearningAgent(ReinforcementAgent):
             return random.choice(legalActions)
         else:
             return self.computeActionFromQValues(state)
-        
+
         #util.raiseNotDefined()
 
         #return action
@@ -130,7 +133,7 @@ class QLearningAgent(ReinforcementAgent):
           it will be called on your behalf
         """
         "*** YOUR CODE HERE ***"
-               
+
         sample = reward + self.discount * self.computeValueFromQValues(nextState)
         key = state,action
         self.qvalue[key] = (1.0 - self.alpha) * self.getQValue(state,action) + self.alpha * sample
@@ -171,7 +174,7 @@ class PacmanQAgent(QLearningAgent):
         method.
         """
         action = QLearningAgent.getAction(self,state)
-        self.doAction(state,action)
+        # self.doAction(state,action)
         return action
 
 
@@ -188,6 +191,15 @@ class ApproximateQAgent(PacmanQAgent):
         PacmanQAgent.__init__(self, **args)
         self.weights = util.Counter()
 
+        if args['does_load_weights']:
+            print ('load weight')
+            with open('weights/teacher_weights.json') as json_file:
+                loaded_weights = json.load(json_file)
+            for key in loaded_weights:
+                self.weights[key] = loaded_weights[key]
+        else:
+            print ('does not load weight')
+
     def getWeights(self):
         return self.weights
 
@@ -201,7 +213,8 @@ class ApproximateQAgent(PacmanQAgent):
         features = f.getFeatures(state,action)
         qvalue = 0
         for feature in features.keys():
-            qvalue += self.weights[feature] * features[feature]
+            # qvalue += self.weights[feature] * features[feature]
+            qvalue += self.weights[feature[0].__str__()+ '----' +  feature[1]] * features[feature]
         return qvalue
         #util.raiseNotDefined()
 
@@ -219,9 +232,10 @@ class ApproximateQAgent(PacmanQAgent):
             maxqnext = 0
         diff = (reward + (self.discount * maxqnext)) - self.getQValue(state,action)
         features = self.featExtractor.getFeatures(state,action)
-        self.qvalue[(state,action)] += self.alpha * diff 
+        self.qvalue[(state,action)] += self.alpha * diff
         for feature in features.keys():
-            self.weights[feature] += self.alpha * diff * features[feature]
+            # self.weights[feature] += self.alpha * diff * features[feature]
+            self.weights[feature[0].__str__()+ '----' +  feature[1]] += self.alpha * diff * features[feature]
         #util.raiseNotDefined()
 
     def final(self, state):
@@ -234,3 +248,11 @@ class ApproximateQAgent(PacmanQAgent):
             # you might want to print your weights here for debugging
             "*** YOUR CODE HERE ***"
             pass
+
+    def calc_state_importance(self, state):
+        si = 0
+        legalActions = self.getLegalActions(state)
+        if len(legalActions) > 1:
+            qs = [self.getQValue(state, action) for action in legalActions]
+            si = np.max(qs) - np.min(qs)
+        return si
